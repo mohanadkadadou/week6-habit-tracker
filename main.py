@@ -101,7 +101,7 @@ def get_streak(habit_id: int, today: date | None = None):
         habit = conn.execute("SELECT id FROM habits WHERE id = ?", (habit_id,)).fetchone()
         if habit is None:
             raise HTTPException(status_code=404, detail="unknown habit")
-        rows = conn.execute("SELECT DISTINCT day FROM checkins WHERE habit_id = ?", (habit_id,))
+        rows = conn.execute("SELECT day FROM checkins WHERE habit_id = ?", (habit_id,))
         days = {r["day"] for r in rows.fetchall()}
     today = today or date.today()
     streak = 0
