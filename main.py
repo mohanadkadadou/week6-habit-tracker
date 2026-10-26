@@ -10,12 +10,14 @@ Test:
     pytest
 """
 
+import re
 import sqlite3
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 DB_PATH = Path(__file__).parent / "habits.db"
 
@@ -46,12 +48,37 @@ def init_db() -> None:
 init_db()
 
 
+MAX_NAME_LENGTH = 100
+DAY_FORMAT = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
 class HabitIn(BaseModel):
     name: str
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be empty or whitespace-only")
+        if len(value) > MAX_NAME_LENGTH:
+            raise ValueError(f"name must be at most {MAX_NAME_LENGTH} characters")
+        return value
 
 
 class CheckinIn(BaseModel):
     day: str  # ISO date, e.g. "2026-09-22"
+
+    @field_validator("day")
+    @classmethod
+    def day_is_iso_date(cls, value: str) -> str:
+        if not DAY_FORMAT.fullmatch(value):
+            raise ValueError("day must be an ISO date in YYYY-MM-DD format")
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise ValueError("day is not a valid calendar date") from None
+        return value
 
 
 @app.post("/habits")

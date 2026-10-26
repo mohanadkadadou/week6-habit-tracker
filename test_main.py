@@ -25,3 +25,35 @@ def test_checkin_flow():
 def test_checkin_unknown_habit_404():
     r = client.post("/habits/99999/checkin", json={"day": "2026-09-22"})
     assert r.status_code == 404
+
+
+def test_create_habit_strips_whitespace():
+    r = client.post("/habits", json={"name": "  Meditate  "})
+    assert r.status_code == 200
+    assert r.json()["name"] == "Meditate"
+
+
+def test_create_habit_rejects_empty_and_blank_names():
+    for bad in ["", "   ", "\t\n"]:
+        r = client.post("/habits", json={"name": bad})
+        assert r.status_code == 422
+        assert "name must not be empty" in r.text
+
+
+def test_create_habit_rejects_overlong_name():
+    r = client.post("/habits", json={"name": "x" * 101})
+    assert r.status_code == 422
+    assert "at most 100" in r.text
+
+
+def test_create_habit_rejects_missing_name():
+    assert client.post("/habits", json={}).status_code == 422
+
+
+def test_checkin_rejects_malformed_day():
+    hid = client.post("/habits", json={"name": "Journal"}).json()["id"]
+    for bad in ["", "tomorrow", "2026-9-22", "22-09-2026", "20260922", "2026-13-01", "2026-02-30"]:
+        r = client.post(f"/habits/{hid}/checkin", json={"day": bad})
+        assert r.status_code == 422, bad
+        assert "day" in r.text
+    assert client.get(f"/habits/{hid}/checkins").json() == []
