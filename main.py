@@ -91,15 +91,19 @@ def list_checkins(habit_id: int):
 
 
 @app.get("/habits/{habit_id}/streak")
-def get_streak(habit_id: int):
-    """Consecutive days ending today with a check-in (0 if none today)."""
+def get_streak(habit_id: int, today: date | None = None):
+    """Consecutive days ending today with a check-in (0 if none today).
+
+    `today` (ISO date) is optional: clients pass their own local date so the result does not
+    depend on the server's time zone, and tests can be deterministic. Malformed values get a 422.
+    """
     with closing(get_db()) as conn:
         habit = conn.execute("SELECT id FROM habits WHERE id = ?", (habit_id,)).fetchone()
         if habit is None:
             raise HTTPException(status_code=404, detail="unknown habit")
         rows = conn.execute("SELECT DISTINCT day FROM checkins WHERE habit_id = ?", (habit_id,))
         days = {r["day"] for r in rows.fetchall()}
-    today = date.today()
+    today = today or date.today()
     streak = 0
     while (today - timedelta(days=streak)).isoformat() in days:
         streak += 1

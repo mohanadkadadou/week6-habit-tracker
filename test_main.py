@@ -33,7 +33,7 @@ def _streak_habit(offsets):
     hid = client.post("/habits", json={"name": "Streaky"}).json()["id"]
     for off in offsets:
         day = (date.today() - timedelta(days=off)).isoformat()
-        client.post(f"/habits/{hid}/checkin", json={"day": day})
+        assert client.post(f"/habits/{hid}/checkin", json={"day": day}).status_code == 200
     return hid
 
 
@@ -59,3 +59,17 @@ def test_streak_no_checkins_is_zero():
 
 def test_streak_unknown_habit_404():
     assert client.get("/habits/99999/streak").status_code == 404
+
+
+def test_streak_uses_client_supplied_today():
+    """A client in another time zone can pass its own 'today'; the server clock is not used."""
+    hid = client.post("/habits", json={"name": "Zone"}).json()["id"]
+    for day in ["2030-01-09", "2030-01-10", "2030-01-11"]:
+        client.post(f"/habits/{hid}/checkin", json={"day": day})
+    assert client.get(f"/habits/{hid}/streak", params={"today": "2030-01-11"}).json()["streak"] == 3
+    assert client.get(f"/habits/{hid}/streak", params={"today": "2030-01-12"}).json()["streak"] == 0
+
+
+def test_streak_rejects_malformed_today():
+    hid = client.post("/habits", json={"name": "Bad today"}).json()["id"]
+    assert client.get(f"/habits/{hid}/streak", params={"today": "not-a-date"}).status_code == 422
