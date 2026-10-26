@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from main import app
@@ -25,3 +26,82 @@ def test_checkin_flow():
 def test_checkin_unknown_habit_404():
     r = client.post("/habits/99999/checkin", json={"day": "2026-09-22"})
     assert r.status_code == 404
+
+
+def test_create_habit_strips_whitespace():
+    r = client.post("/habits", json={"name": "  Meditate  "})
+    assert r.status_code == 200
+    assert r.json()["name"] == "Meditate"
+
+
+def test_create_habit_rejects_empty_and_blank_names():
+    for bad in ["", "   ", "\t\n"]:
+        r = client.post("/habits", json={"name": bad})
+        assert r.status_code == 422
+        assert "name must not be empty" in r.text
+
+
+def test_create_habit_rejects_overlong_name():
+    r = client.post("/habits", json={"name": "x" * 101})
+    assert r.status_code == 422
+    assert "at most 100" in r.text
+
+
+def test_create_habit_rejects_missing_name():
+    assert client.post("/habits", json={}).status_code == 422
+
+
+def test_checkin_rejects_malformed_day():
+    hid = client.post("/habits", json={"name": "Journal"}).json()["id"]
+    for bad in ["", "tomorrow", "2026-9-22", "22-09-2026", "20260922", "2026-13-01", "2026-02-30"]:
+        r = client.post(f"/habits/{hid}/checkin", json={"day": bad})
+        assert r.status_code == 422, bad
+        assert "YYYY-MM-DD" in r.text or "valid calendar date" in r.text, r.text
+    assert client.get(f"/habits/{hid}/checkins").json() == []
+
+
+def test_checkin_rejects_lookalike_digits_and_trailing_whitespace():
+    """Unicode digits, full-width digits, ISO week dates and padding must not be stored."""
+    hid = client.post("/habits", json={"name": "Strict days"}).json()["id"]
+    for bad in ["٢٠٢٦-٠٩-٢٢", "２０２６-０９-２２", "2026-W39-2", "2026-09-22\n", " 2026-09-22"]:
+        r = client.post(f"/habits/{hid}/checkin", json={"day": bad})
+        assert r.status_code == 422, bad
+    assert client.get(f"/habits/{hid}/checkins").json() == []
+
+
+def test_stripped_name_is_what_gets_listed():
+    hid = client.post("/habits", json={"name": "  Floss  "}).json()["id"]
+    assert {"id": hid, "name": "Floss"} in client.get("/habits").json()
+
+
+@pytest.mark.parametrize("bad", ["\u200b", "\u200b\u200b", " \u200b ", "\u2060", "\ufeff"])
+def test_create_habit_rejects_invisible_only_names(bad):
+    assert client.post("/habits", json={"name": bad}).status_code == 422
+
+
+@pytest.mark.parametrize("length,status", [(1, 200), (100, 200), (101, 422)])
+def test_name_length_boundaries(length, status):
+    assert client.post("/habits", json={"name": "a" * length}).status_code == status
+
+
+@pytest.mark.parametrize("body", [{"name": None}, {"name": 123}, {"name": ["x"]}, {}])
+def test_create_habit_rejects_wrong_types_and_missing_name(body):
+    assert client.post("/habits", json=body).status_code == 422
+
+
+@pytest.mark.parametrize("body", [{}, {"day": None}, {"day": 20260922}])
+def test_checkin_rejects_missing_or_non_string_day(body):
+    hid = client.post("/habits", json={"name": "Types"}).json()["id"]
+    assert client.post(f"/habits/{hid}/checkin", json=body).status_code == 422
+
+
+def test_checkin_leap_days():
+    hid = client.post("/habits", json={"name": "Leap"}).json()["id"]
+    assert client.post(f"/habits/{hid}/checkin", json={"day": "2024-02-29"}).status_code == 200
+    r = client.post(f"/habits/{hid}/checkin", json={"day": "2025-02-29"})
+    assert r.status_code == 422 and "valid calendar date" in r.text
+
+
+def test_error_precedence_bad_day_beats_unknown_habit():
+    """Body validation runs first: a malformed day on an unknown habit is 422, not 404."""
+    assert client.post("/habits/99999/checkin", json={"day": "nope"}).status_code == 422
