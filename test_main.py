@@ -7,7 +7,7 @@ client = TestClient(app)
 
 def test_create_and_list_habit():
     r = client.post("/habits", json={"name": "Read 20 minutes"})
-    assert r.status_code == 200
+    assert r.status_code == 201
     hid = r.json()["id"]
     r2 = client.get("/habits")
     assert r2.status_code == 200
@@ -17,7 +17,7 @@ def test_create_and_list_habit():
 def test_checkin_flow():
     hid = client.post("/habits", json={"name": "Stretch"}).json()["id"]
     r = client.post(f"/habits/{hid}/checkin", json={"day": "2026-09-22"})
-    assert r.status_code == 200
+    assert r.status_code == 201
     r2 = client.get(f"/habits/{hid}/checkins")
     assert r2.json() == ["2026-09-22"]
 
