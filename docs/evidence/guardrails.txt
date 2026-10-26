@@ -1,0 +1,40 @@
+$ # 1) a failing test fails the build
+$ scripts/check.sh
+E        +  where 200 = <Response [200 OK]>.status_code
+test_main.py:10: AssertionError
+______________________________ test_checkin_flow _______________________________
+    def test_checkin_flow():
+        hid = client.post("/habits", json={"name": "Stretch"}).json()["id"]
+        r = client.post(f"/habits/{hid}/checkin", json={"day": "2026-09-22"})
+>       assert r.status_code == 201
+E       assert 200 == 201
+E        +  where 200 = <Response [200 OK]>.status_code
+test_main.py:20: AssertionError
+=========================== short test summary info ============================
+FAILED test_main.py::test_create_and_list_habit - assert 200 == 201
+FAILED test_main.py::test_checkin_flow - assert 200 == 201
+2 failed, 1 passed, 1 warning in 0.33s
+
+$ # 2) unformatted code is caught by black
+$ scripts/check.sh
+==> black --check
+would reformat ./main.py
+
+Oh no! 💥 💔 💥
+1 file would be reformatted, 1 file would be left unchanged.
+
+$ # 3) an unused import is caught by ruff
+$ .venv/bin/python -m ruff check .
+I001 [*] Import block is un-sorted or un-formatted
+ --> main.py:1:1
+  |
+1 | import os
+  | ^^^^^^^^^
+2 | """Habit Tracker — starter app for Week 6.
+  |
+help: Organize imports
+
+$ # clean tree passes
+All checks passed!
+3 passed, 1 warning in 0.30s
+ALL CHECKS PASSED
