@@ -12,6 +12,7 @@ Test:
 
 import re
 import sqlite3
+import unicodedata
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -59,9 +60,14 @@ class HabitIn(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def name_not_blank(cls, value: str) -> str:
+    def validate_name(cls, value: str) -> str:
+        """Trim the name (the trimmed name is stored/returned); require 1-100 visible chars."""
         value = value.strip()
-        if not value:
+        if (
+            not value
+            or not any(ch.isprintable() and not ch.isspace() for ch in value)
+            or all(unicodedata.category(ch) in {"Cf", "Zs", "Zl", "Zp"} for ch in value)
+        ):
             raise ValueError("name must not be empty or whitespace-only")
         if len(value) > MAX_NAME_LENGTH:
             raise ValueError(f"name must be at most {MAX_NAME_LENGTH} characters")

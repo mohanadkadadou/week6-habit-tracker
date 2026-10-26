@@ -1,4 +1,5 @@
-from fastapi.testclient import TestClient
+import TestClient
+from fastapi.testclient import pytest
 
 from main import app
 
@@ -55,7 +56,7 @@ def test_checkin_rejects_malformed_day():
     for bad in ["", "tomorrow", "2026-9-22", "22-09-2026", "20260922", "2026-13-01", "2026-02-30"]:
         r = client.post(f"/habits/{hid}/checkin", json={"day": bad})
         assert r.status_code == 422, bad
-        assert "day" in r.text
+        assert "YYYY-MM-DD" in r.text or "valid calendar date" in r.text, r.text
     assert client.get(f"/habits/{hid}/checkins").json() == []
 
 
@@ -71,3 +72,36 @@ def test_checkin_rejects_lookalike_digits_and_trailing_whitespace():
 def test_stripped_name_is_what_gets_listed():
     hid = client.post("/habits", json={"name": "  Floss  "}).json()["id"]
     assert {"id": hid, "name": "Floss"} in client.get("/habits").json()
+
+
+@pytest.mark.parametrize("bad", ["\u200b", "\u200b\u200b", " \u200b ", "\u2060", "\ufeff"])
+def test_create_habit_rejects_invisible_only_names(bad):
+    assert client.post("/habits", json={"name": bad}).status_code == 422
+
+
+@pytest.mark.parametrize("length,status", [(1, 200), (100, 200), (101, 422)])
+def test_name_length_boundaries(length, status):
+    assert client.post("/habits", json={"name": "a" * length}).status_code == status
+
+
+@pytest.mark.parametrize("body", [{"name": None}, {"name": 123}, {"name": ["x"]}, {}])
+def test_create_habit_rejects_wrong_types_and_missing_name(body):
+    assert client.post("/habits", json=body).status_code == 422
+
+
+@pytest.mark.parametrize("body", [{}, {"day": None}, {"day": 20260922}])
+def test_checkin_rejects_missing_or_non_string_day(body):
+    hid = client.post("/habits", json={"name": "Types"}).json()["id"]
+    assert client.post(f"/habits/{hid}/checkin", json=body).status_code == 422
+
+
+def test_checkin_leap_days():
+    hid = client.post("/habits", json={"name": "Leap"}).json()["id"]
+    assert client.post(f"/habits/{hid}/checkin", json={"day": "2024-02-29"}).status_code == 200
+    r = client.post(f"/habits/{hid}/checkin", json={"day": "2025-02-29"})
+    assert r.status_code == 422 and "valid calendar date" in r.text
+
+
+def test_error_precedence_bad_day_beats_unknown_habit():
+    """Body validation runs first: a malformed day on an unknown habit is 422, not 404."""
+    assert client.post("/habits/99999/checkin", json={"day": "nope"}).status_code == 422
