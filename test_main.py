@@ -57,3 +57,17 @@ def test_checkin_rejects_malformed_day():
         assert r.status_code == 422, bad
         assert "day" in r.text
     assert client.get(f"/habits/{hid}/checkins").json() == []
+
+
+def test_checkin_rejects_lookalike_digits_and_trailing_whitespace():
+    """Unicode digits, full-width digits, ISO week dates and padding must not be stored."""
+    hid = client.post("/habits", json={"name": "Strict days"}).json()["id"]
+    for bad in ["٢٠٢٦-٠٩-٢٢", "２０２６-０９-２２", "2026-W39-2", "2026-09-22\n", " 2026-09-22"]:
+        r = client.post(f"/habits/{hid}/checkin", json={"day": bad})
+        assert r.status_code == 422, bad
+    assert client.get(f"/habits/{hid}/checkins").json() == []
+
+
+def test_stripped_name_is_what_gets_listed():
+    hid = client.post("/habits", json={"name": "  Floss  "}).json()["id"]
+    assert {"id": hid, "name": "Floss"} in client.get("/habits").json()

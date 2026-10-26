@@ -49,7 +49,9 @@ init_db()
 
 
 MAX_NAME_LENGTH = 100
-DAY_FORMAT = re.compile(r"\d{4}-\d{2}-\d{2}")
+# Strict YYYY-MM-DD, ASCII digits only. The regex is needed because date.fromisoformat() also
+# accepts other ISO forms on Python 3.11+ ("20260922", "2026-W39-2"), which we do not want stored.
+DAY_FORMAT = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 class HabitIn(BaseModel):
